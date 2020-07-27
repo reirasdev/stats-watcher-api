@@ -38,12 +38,18 @@ public class SalesProcessor implements Processor {
 		} else if (status == -1) {
 			System.err.printf("[ERROR] Not possible to process file %s. Retrying later \n", path);
 			this.asyncRetry(path);
+			
+		} else if (status == -2) {
+			this.asyncRetry(path);
 		}
 
 	}
 
 	private int parseBusinessEntities(Path path, List<BusinessEntity> processedEntitiesList) {
 		int status = 1;
+		
+		if (!path.toFile().exists() || path.toFile().isDirectory())
+			return status = 0;
 		
 		try (BufferedReader fileBufferedReader = new BufferedReader(new InputStreamReader(new FileInputStream(path.toFile()), "UTF-8"))) {
 			Parser parser = null;
@@ -72,7 +78,7 @@ public class SalesProcessor implements Processor {
 
 		} catch (FileNotFoundException e) {
 			//do nothing
-			status = -1;
+			status = -2;
 			
 		} catch (IOException e) {
 			System.err.printf("[ERROR] Not possible to read file: %s \n", path);
