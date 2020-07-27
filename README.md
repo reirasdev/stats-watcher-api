@@ -7,4 +7,4 @@
    - *mvn clean package*
    - *java -jar target/stats-watcher-api-0.0.1.jar*
 3. Add the files to be processed to *data/in* directory
-4. After the process is finished, the output report is created at *data/processed* and the input file is moved to *data/processed*
+4. After finishing, the output report is created at *data/out* and the input file is moved to *data/processed*
