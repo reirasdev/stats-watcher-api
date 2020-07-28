@@ -4,9 +4,10 @@ import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileWriter;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -26,26 +27,27 @@ public class SalesProcessor implements Processor {
 
 	public void process(Path path) {
 		List<BusinessEntity> processedEntitiesList = new ArrayList<BusinessEntity>();
-		int status = this.parseBusinessEntities(path, processedEntitiesList);
+		List<String> processErrors = new ArrayList<String>();
+		int status = this.parseBusinessEntities(path, processedEntitiesList, processErrors);
 
 		if (status == 1) {	
 			SalesStatistic salesStatistic = new SalesStatistic();
 			processedEntitiesList.forEach(entity -> entity.summarizeStatistics(salesStatistic));
 			
-			this.writeOutputFile(Paths.get(Configuration.OUT_DIR).resolve(path.getFileName()), this.generateOutputContent(salesStatistic));
+			this.writeOutputFile(Paths.get(Configuration.OUT_DIR).resolve(path.getFileName()), this.generateOutputContent(salesStatistic), processErrors);
 			this.moveFile(path, Paths.get(Configuration.PROCESSED_DIR).resolve(path.getFileName()));
 
 		} else if (status == -1) {
 			System.err.printf("[ERROR] Not possible to process file %s. Retrying later \n", path);
-			this.asyncRetry(path);
+			this.retry(path);
 			
 		} else if (status == -2) {
-			this.asyncRetry(path);
+			this.retry(path);
 		}
 
 	}
 
-	private int parseBusinessEntities(Path path, List<BusinessEntity> processedEntitiesList) {
+	private int parseBusinessEntities(Path path, List<BusinessEntity> processedEntitiesList, List<String> errors) {
 		int status = 1;
 		
 		if (!path.toFile().exists() || path.toFile().isDirectory())
@@ -53,7 +55,7 @@ public class SalesProcessor implements Processor {
 		
 		try (BufferedReader fileBufferedReader = new BufferedReader(new InputStreamReader(new FileInputStream(path.toFile()), "UTF-8"))) {
 			Parser parser = null;
-			int lineCount = 0;
+			Integer lineCount = 0;
 			String line;
 
 			while ((line = fileBufferedReader.readLine()) != null) {
@@ -62,16 +64,21 @@ public class SalesProcessor implements Processor {
 					String[] lineToArray = line.split("ç");
 					parser = ParserFactory.getParser(lineToArray[0]);
 
-					if (parser == null) {
-						System.err.printf("[ERROR] Line: %s. File %s. Could not find a parser for this entity type: %s \n", lineCount, path, line);
+					if (parser == null) {						
+						errors.add("[ERROR] Line: {lineCount}. Could not find a parser for this entity type: {line}"
+								.replace("{lineCount}", lineCount.toString())
+								.replace("{line}", line));
 						continue;
 					}
 
 					processedEntitiesList.add(parser.parse(lineToArray));
 
 				} catch (Exception e) {
-					System.err.printf("[ERROR] Line %s. File %s. Error parsing. Invalid line is: %s \n", lineCount, path, line);
-					e.printStackTrace();
+					errors.add("[ERROR] Line {lineCount}. Error parsing: {line} Exception: {exception}"
+							.replace("{lineCount}", lineCount.toString())
+							.replace("{line}", line)
+							.replace("{exception}", e.toString()));
+			
 				}
 
 			}
@@ -80,7 +87,7 @@ public class SalesProcessor implements Processor {
 			//do nothing
 			status = -2;
 			
-		} catch (IOException e) {
+		} catch (IOException e) {			
 			System.err.printf("[ERROR] Not possible to read file: %s \n", path);
 			e.printStackTrace();
 			status = -1;
@@ -103,11 +110,18 @@ public class SalesProcessor implements Processor {
 		return str.toString();
 	}
 
-	private void writeOutputFile(Path path, String content) {
+	private void writeOutputFile(Path path, String content, List<String> errors) {
 
 		try {
-			BufferedWriter bufferedWriter = new BufferedWriter(new FileWriter(path.toFile()));
+			BufferedWriter bufferedWriter = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(path.toFile()), "UTF-8"));
 			bufferedWriter.write(content);
+			
+			if(!errors.isEmpty())
+				bufferedWriter.write("\n\nERRORS: \n");
+				
+			for(String e : errors)
+				bufferedWriter.write("- " + e + " \n");
+			
 			bufferedWriter.close();
 
 		} catch (IOException e) {
@@ -131,14 +145,14 @@ public class SalesProcessor implements Processor {
 
 	}
 
-	private void asyncRetry(Path path) {
+	public void retry(Path path) {
 		CompletableFuture.runAsync(() -> {
 			try {
 				Thread.sleep(10000);
 
 				if (path.toFile().exists()) {
 					System.out.printf("[INFO] Retrying file %s \n", path);
-					path.toFile().setLastModified(System.currentTimeMillis());
+					this.process(path);
 				}
 
 			} catch (InterruptedException e) {

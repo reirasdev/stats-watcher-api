@@ -54,15 +54,12 @@ public class FileWatcher implements Watcher {
 					watchEventArray[i] = StandardWatchEventKinds.ENTRY_CREATE;
 				else if (events[i].equals(WatcherType.ON_MODIFY))
 					watchEventArray[i] = StandardWatchEventKinds.ENTRY_MODIFY;
-				else if (events[i].equals(WatcherType.ON_DELETE))
-					watchEventArray[i] = StandardWatchEventKinds.ENTRY_DELETE;
 			}
 			
 		} else {
 			watchEventArray = new WatchEvent.Kind[3];
 			watchEventArray[0] = StandardWatchEventKinds.ENTRY_CREATE;
 			watchEventArray[1] = StandardWatchEventKinds.ENTRY_MODIFY;
-			watchEventArray[2] = StandardWatchEventKinds.ENTRY_DELETE;
 		}
 
 		path.register(this.fileWatcher, watchEventArray);
